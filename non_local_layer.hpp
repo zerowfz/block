@@ -30,6 +30,15 @@ class NonLocalLayer:public Layer<Dtype>{
     virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
 		    const vector<bool>& propagate_down,const vector<Blob<Dtype>*>& bottom);
     // different operation 
-    virtual void emd_guassian()
+    virtual void emd_guassian();
+    int num_;
+    int fea_channel_;
+    int height_;
+    int width_;
+    int infea_dim_;
+    
+    shared_ptr<blob<dtype>> conv1_layers_;
+    shared_ptr<blob<dtype>> conv2_layers_;
+    shared_ptr<blob<dtype>> conv3_layers_;
 }
 }

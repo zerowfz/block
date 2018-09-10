@@ -4,7 +4,7 @@
 namespace caffe{
 
 template <typename Dtype>
-void LocalLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+void NonLocalLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
 		const vector<Blob<Dtype>*>& top){
   CHECK_EQ(bottom.size(),2)<<"number of input should be 2";
   CHECK_EQ(top.size(),2)<<"number of output should be 2";
@@ -21,15 +21,39 @@ void LocalLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   infea_dim_ = this->layer_param_.nonlocal_param().conv_output();
 
 
-  LayerParameter conv_param1 = 
-  LayerParameter conv_param2 =
-  LayerParameter conv_param3 = 
-  conv1_layers_.reset()
-  conv1_layers->SetUp(bottom[0],conv1_top_);
-  covn2_layers.reset()
-  conv2_layers->SetUp(bottom[0],conv2_top_);
-  conv3_layers.reset()
-  conv3_layers->SetUp(bottom[0],conv3_top_);
+  LayerParameter conv_param;
+  conv_param.mutable_convolution_param() = this->layer_param_.nonlocal_param().conv_param();
+  conv1_layers_.reset(new ConvolutionLayer<Dtype>(conv_param));
+  conv1_layers_->SetUp(bottom[0],conv1_top_);
+  covn2_layers_.reset(new ConvolutionLayer<Dtype>(conv_param));
+  conv2_layers_->SetUp(bottom[0],conv2_top_);
+  conv_param.mutable_convolution_param()->set_num_output(fea_channel_);
+  conv3_layers_.reset(new ConvolutionLayer<Dtype>(conv_param));
+  conv3_layers_->SetUp(bottom[0],conv3_top_);
+
+  //blob parameter
+  if(!conv_param.mutable_convolution_param()->has_bias_term()){
+    CHECK_EQ(this->blobs_.size(),3)<<"three param should be specific";
+    this->blobs_[0].reset(conv1_layers_->blobs()[0]);
+    this->blobs_[1].reset(conv2_layers_->blobs()[0]);
+    this->blobs_[2].reset(conv3_layers_->blobs()[0]);
+  }else {
+    CHECK_EQ(this->blobs_.size(),6)<<"six param shold be specific";
+    this->blobs_[0].reset(conv1_layers_->blobs()[0]);
+    this->blobs_[1].reset(conv1_layers_->blobs()[1]);
+    this->blobs_[2].reset(conv2_layers_->blobs()[0]);
+    this->blobs_[3].reset(conv2_layers_->blobs()[1]);
+    this->blobs_[4].reset(conv3_layers_->blobs()[0]);
+    this->blobs_[5].reset(conv3_layers_->blobs()[1]);
+  }
+
+  //option for corresponence between pixel and its neighbor
+
+}
+template <typename Dtype>
+void NonLocalLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
+		const vector<Blob<Dtype>*>& top){
+    if(num_==bottom[0]->num() && )
 }
 
 }
