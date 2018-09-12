@@ -37,8 +37,22 @@ class NonLocalLayer:public Layer<Dtype>{
     int width_;
     int infea_dim_;
     
-    shared_ptr<blob<dtype>> conv1_layers_;
-    shared_ptr<blob<dtype>> conv2_layers_;
-    shared_ptr<blob<dtype>> conv3_layers_;
+    shared_ptr<ConvolutionLayer<Dtype>> conv1_layers_;
+    shared_ptr<ConvolutionLayer<Dtype>> conv2_layers_;
+    shared_ptr<ConvolutionLayer<Dtype>> conv3_layers_;
+    shared_ptr<SplitLayer<Dtype>> split_layers_;
+    shared_ptr<PermuteLayer<Dtype>> permute_layers_;
+
+    vector<Blob<Dtype>*> conv1_bottom_vec_;
+    vector<Blob<Dtype>*> conv1_top_vec_;
+    vector<Blob<Dtype>*> conv2_bottom_vec_;
+    vector<Blob<Dtype>*> conv2_top_vec_;
+    vector<Blob<Dtype>*> conv3_bottom_vec_;
+    vector<Blob<Dtype>*> conv3_top_vec_;
+    vector<Blob<Dtype>*> split_bottom_vec_;
+    vector<Blob<Dtype>*> split_top_vec_;
+    vector<Blob<Dtype>*> permute_layers_vec_;
+    
+
 }
 }
