@@ -4,6 +4,25 @@
 namespace caffe{
 
 template <typename Dtype>
+void NonLocalLayer<Dtype>::neibor2col(const Dtype* data_im,const int channels,const int height,const int width,
+const int kernel,const int center,Dtype* data_col){
+    int center_h = center/width;
+	int center_w = center%width;
+	for(int kernel_row = 0;kernel_row<kernel;++kernel_row){
+		int nei_h = center_h - kernel +kernel_row;
+		nei_h = nei_h>=0?nei_h:height+nei_h;
+		nei_h = nei_h<height?nei_h:nei_h-height;
+	    for(int kernel_col = 0;kernel_col<kernel;++kernel_col){
+			int nei_w = center_w - kernel + kernel_col;
+			nei_w = nei_w>=0?nei_w:width+nei_w;
+			nei_w = nei_w<width?nei_w:nei_w-width;
+            for(int c = 0;c <channel;++c){
+			    	*(data_col++) = data_im[(c*height+nei_h)*width+nei_w];
+			}
+		}
+	}
+}
+template <typename Dtype>
 void NonLocalLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
 		const vector<Blob<Dtype>*>& top){
   CHECK_EQ(bottom.size(),2)<<"number of input should be 2";
