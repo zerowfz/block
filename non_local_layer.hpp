@@ -44,6 +44,7 @@ class NonLocalLayer:public Layer<Dtype>{
     shared_ptr<PermuteLayer<Dtype>> permute_layers_;//for conv1_data
     shared_ptr<PermuteLayer<Dtype>> permute_layres0_;//for top[0] data
     shared_ptr<PermuteLayer<Dtype>> permute_layres1_;//for top[1]
+    shared_ptr<PermuteLayer<Dtype>> permute_layers2_;
 
     vector<Blob<Dtype>*> conv1_bottom_vec_;
     vector<Blob<Dtype>*> conv1_top_vec_;
@@ -56,6 +57,7 @@ class NonLocalLayer:public Layer<Dtype>{
     vector<Blob<Dtype>*> permute_top_vec_;
     vector<Blob<Dtype>*> top1_tem_vec_;
     vector<Blob<Dtype>*> top0_tem_vec_;
+    vector<Blob<Dtype>*> permute_bottom1_vec_;
     Blob<Dtype> norm_cor_tem_;
     
 

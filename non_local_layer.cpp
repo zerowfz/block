@@ -91,9 +91,11 @@ void NonLocalLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   permute_layers_->Setup(conv1_top_vec_,permute_top_vec_);
 
   top0_tem_vec_.push_back(new Blob<Dtype>());
-  top0_tem_vec_[0].mutable_cpu_data()->Reshape(num_,height_,width_,fea_channel_);
+  top0_tem_vec_[0]->Reshape(num_,height_,width_,fea_channel_);
   top1_tem_vec_.push_back(new Blob<Dtype>());
-  top1_tem_vec_[0].mutable_cpu_data()->Reshape(num_,height_,width_,corr_channel_);
+  top1_tem_vec_[0]->Reshape(num_,height_,width_,corr_channel_);
+  permute_bottom1_vec_.push_back(new Blob<Dtype>());
+  permute_bottom1_vec_[0]->Reshpae(num_,height,width_,corr_channel_);
   LayerParamter permute_param;
   permute_param.mutable_permute_param()->add_order(0);
   permute_param.mutable_permute_param()->add_order(3);
@@ -109,6 +111,15 @@ void NonLocalLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   permute_param.mutable_permute_param()->add_order(2);
   permute_layers1_.reset(new PermuteLayer<Dtype>(permute_param));
   permute_layers1_->Setup(top1_tem_vec_,vector<Blob<Dtype>*>{top[1]});
+
+  LayerParamter permute_param;
+  permute_param.mutable_permute_param()->add_order(0);
+  permute_param.mutable_permute_param()->add_order(2);
+  permute_param.mutable_permute_param()->add_order(3);
+  permute_param.mutable_permute_param()->add_order(1);
+  permute_layers2_.reset(new PermuteLayer<Dtype>(permute_param));
+  permute_layers2_->Setup(vector<Blob<Dtype>*>{bottom[1]},permute_bottom1_vec_);
+
 
   //softmax 中间值；
   norm_cor_tem_.Reshape(num_,height_,width_,fea_channel_);
@@ -153,10 +164,12 @@ void NonLocalLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
     conv2_layers_->Reshape(conv2_bottom_vec_,conv2_top_vec_);
     conv3_layers_->Reshape(conv3_bottom_vec_,conv3_top_vec_);
     permute_layers_->Reshape(conv1_top_vec_,permute_top_vec_);
-    top0_tem_vec_[0]->mutable_cpu_data()->Reshape(num_,height_,width_,fea_channel_);
-    top1_tem_vec_[1]->mutable_cpu_data()->Reshape(num_,height_,width_,corr_channel_);
+    top0_tem_vec_[0]->Reshape(num_,height_,width_,fea_channel_);
+    top1_tem_vec_[1]->Reshape(num_,height_,width_,corr_channel_);
+    permute_bottom1_vec_->Reshape(num_,height_,width_,corr_channel_);
     permute_layers0_->Reshape(top0_tem_vec_,vector<Blob<Dtype>*> {top[0]});
     permute_layers1_->Reshape(top1_tem_vec_,vector<Blob<Dtype>*> {top[1]});
+    permute_layers2_->Reshape(vector<Blob<Dtype>*>{bottom[1]},permute_bottom1_vec_);
     norm_cor_tem_.Reshape(num_,height_,width_,fea_channel_);
 }
 
@@ -176,6 +189,7 @@ void NonLocalLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   conv3_layers_->Forward_cpu(conv3_bottom_vec_,conv3_top_vec_);
 
   permute_layers_->Forward_cpu(conv1_top_vec_,permute_top_vec_);
+  permute_layres2_->Forward_cpu(vector<Blob<Dtype>*>{bottom[1]},permute_bottom1_vec_);
   //对于conv1中的每一个特征，与conv2中的q*q个特征，做矩阵乘积运算  1*l ,l*q*q. 
   Blob<Dtype> qxq_l_fea;
   qxq_l_fea.Reshape(corr_channel_,infea_dim_,1,1);
@@ -198,6 +212,8 @@ void NonLocalLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
 	  caffe_cpu_gemv(CblasNoTrans,corr_channel_,infea_dim_,1,qxq_l_fea->cpu_data(),
 			  permute_data+permute_top_vec_->offset(n,j/width_,j%width_),
 			  0,top_cor+offset_each);
+	  caffe_add(fea_channel_,top_cor+offset_each,permute_bottom1_vec_+offset_each,
+			  top_cor+offset_each);
 	  //计算该关系的softmax值
 
 	  caffe_exp<Dtype>(corr_channel_,top_cor+offset_each,norm_data+offset_each);
@@ -217,8 +233,6 @@ void NonLocalLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   permute_layers1_->Forward_cpu(top1_tem_vec_,vector<Blob*>{top[1]});
   caffe_add(num_*height_*width_*fea_channel_,top[0]->cpu_data(),split_top_vec_[3]->cpu_data(),
 		  top[0]->mutable_cpu_data());
-  caffe_add(num_*height_*width_*corr_channel_,top[1]->cpu_data(),bottom[1]->cpu_data(),
-		  top[1]->mutable_cpu_data());
 }
 
 template <typename Dtype>
@@ -240,16 +254,29 @@ void NonLocalLayer::Backward_cpu(const vector<Blob<Dtype>*>& top,
     Dtype* norm_diff = norm_cor_tem_->mutable_cpu_diff();
     Dtype* conv3_diff = conv3_top_vec_[0]->mutable_cpu_diff();
     caffe_set(conv3_top_vec_[0]->count(),0,conv3_diff);
+    Dtype* conv2_diff = conv2_top_vec_[0]->mutable_cpu_diff();
+    caffe_set(conv2_top_vec_[0]->count(),0,conv2_diff);
+    Dtype* conv2_data = conv2_top_vec_[0]->cpu_data();
     
-    Blob<type> qxq_m;
+    Dtype* permute_data = permute_top_vec_[0]->cpu_data();
+    Dtype* permute_diff = permute_top_vec_[0]->mutable_cpu_diff();
+    Blob<Dtype> qxq_m;
     qxq_m.Reshape(corr_channel_,fea_channel_,1,1);
-    Dtype* qxq_m_diff = qxq_m->mutable_cpu_diff();
+    Dtype* qxq_m_diff = qxq_m.mutable_cpu_diff();
+     
+    Blob<Dtype> qxq_1;
+    qxq_1.Reshape(corr_channel_,1,1,1);
+    Dtype* qxq_data = qxq_1.mutable_cpu_data();
 
+    Blob<Dtype> qxq_l;
+    qxq_l.Reshape(corr_channel_,infea_dim_,1,1);
+    Dtype* qxq_l_data = qxq_l.mutable_cpu_data();
     for(int n=0;n<num_;++n){
         for(int j=0;j<height_*width_;++j){
 	    //计算conv3_data的diff
             int offset_cor = top1_data->offset(n,j/width_,j%width_);//corr 矩阵的offset（n,h,w,c）
 	    int offset_fea = top0_data->offset(n,j/width_,j%width_);//fea矩阵的offset(n,h,w,c)
+	    int offset_fea2 = permute_top_vec_[0]->offset(n,j/width_,j%width_);//fea2(l)
 	    
             caffe_cpu_gemv(CblasTrans,1,fea_channel_,1,norm_data+offset_cor,top0_diff+offset_fea,0,qxq_m_diff);
 	    col2neibor(qxq_m_diff,fea_channel_,height_,width_,kernel_,j,conv3_diff);
@@ -258,14 +285,35 @@ void NonLocalLayer::Backward_cpu(const vector<Blob<Dtype>*>& top,
 	    neibor2col(conv3_data,fea_channel_,height_,width_,kernel_,j,qxq_m_diff);
 	    caffe_cpu_gemv(CblasNoTrans,cor_channel_,fea_channel_,1,qxq_m_diff,top0_diff+offset_fea,0,norm_diff+offset_cor);
 
-
+            //计算softmax的梯度，用qxq_diff来存储
+	    caffe_set(cor_channel_,1,qxq_data);
+	    caffe_sub(cor_channel_,qxq_data,norm_diff+offset_cor,qxq_data);
+	    caffe_mul(cor_channel,norm_diff+offset_cor,qxq_data,qxq_data);
+	    caffe_mul(cor_channel,qxq_data,norm_diff+offset_cor,qxq_data);
 	    
+	    //更新top1_diff
+	    caffe_add(cor_channel,qxq_data,top1_diff+offset_cor,top1_diff+offset_cor);
 
+	    //计算conv2_data的梯度
+	    caffe_cpu_gemv(CblasTrans,1,infea_dim_,1,permute_data+offset_fea2,top1_diff+offset_cor,0,
+			    qxq_l_diff); 
+	    col2neibor(qxq_l_diff,infea_dim_,height_,width_,kernel_,j,conv2_diff);
 	    
-
+	    //计算permute_data的梯度
+            neibor2col(conv2_data,infea_dim_,height_,width_,kernel_,j,qxq_l_data);
+	    caffe_cpu_gemv(CblasNoTrans,cor_channel_,infea_dim_,1,qxq_l_data,top1_diff+offset_cor,0,
+			    permute_diff+offset_fea2);
 	}
     }
+    //计算bottom[1]的梯度
+    permute_layres2_->Backward_cpu(top1_tem_vec_,propagate_down,vector<Blob<Dtype>*>{bottom[1]});
 
+    //计算bottom[0]的梯度
+    permute_layers_->Backward_cpu(permute_top_vec_,propagate_down,conv1_top_vec_);
+    conv1_layers_->Backward_cpu(conv1_top_vec_,propagate_down,vector<Blob<Dtype>*>{split_top_vec_[0]});
+    conv2_layers_->Backward_cpu(conv2_top_vec_,propagate_down,vector<Blob<Dtype>*>{split_top_vec_[1]});
+    conv3_layers_->Backward_cpu(conv3_top_vec_,propagate_down,vector<Blob<Dtype>*>{split_top_vec_[2]});
+    split_layers_->Backward_cpu(split_top_vec_,vector<Blob<Dtype>*> {bottom[0]});
 
 }
 }
